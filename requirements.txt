@@ -9,7 +9,6 @@ charset-normalizer==3.3.2
 click==8.1.7
 colorama==0.4.6
 distro==1.9.0
-document==1.0
 docx==0.2.4
 feedparser==6.0.11
 Flask==3.0.3
@@ -25,7 +24,7 @@ joblib==1.4.2
 lxml==5.2.2
 MarkupSafe==2.1.5
 multidict==6.0.5
-numpy==2.2.4
+numpy==1.24.2  # Corrected this line
 openai==0.28.0
 pillow==10.3.0
 pydantic==2.7.1
