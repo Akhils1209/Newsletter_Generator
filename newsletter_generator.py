@@ -73,7 +73,7 @@ def fetch_articles(feed_urls, max_articles=30):
                     "published": entry.get("published", "Unknown")
                 })
         except Exception as e:
-            print(f"⚠️ Error parsing feed {url}: {e}")
+            print(f"Error parsing feed {url}: {e}")
     return articles
 
 # --- COMPUTE ARTICLE SCORES ---
@@ -85,7 +85,7 @@ def compute_scores(articles, interests):
         interest_query = vectorizer.transform([" ".join(interests)])
         scores = cosine_similarity(tfidf_matrix, interest_query).flatten()
     except Exception as e:
-        print(f"⚠️ Error computing TF-IDF scores: {e}")
+        print(f"Error computing TF-IDF scores: {e}")
         scores = [0] * len(articles)
     return scores
 
@@ -99,14 +99,14 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
     top_articles = sorted(zip(articles, scores), key=lambda x: x[1], reverse=True)[:top_n]
 
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"# Personalized Newsletter for {user_name}\n")
+        f.write(f"Personalized Newsletter for {user_name}\n")
         f.write(f"Date: {today}\n\n")
         f.write(f"Top Interests: {', '.join(interests)}\n\n")
         f.write("## Highlights:\n\n")
 
         for i, (article, score) in enumerate(top_articles, 1):
-            f.write(f"### {i}. {article['title']}\n")
-            f.write(f"*Published:* {article['published']}\n\n")
+            f.write(f"{i}. {article['title']}\n")
+            f.write(f"Published: {article['published']}\n\n")
             f.write(f"{article['summary'][:300].strip()}...\n\n")
             f.write(f"[Read Full Article]({article['link']})\n\n")
 
@@ -118,21 +118,21 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
 def generate_for_all_users():
     generated = []
     for user_name, user_profile in USERS.items():
-        print(f"\n📝 Generating newsletter for {user_name}...")
+        print(f"\nGenerating newsletter for {user_name}...")
         articles = fetch_articles(user_profile["feeds"])
         if not articles:
-            print(f"⚠️ No articles fetched for {user_name}. Skipping...")
+            print(f"No articles fetched for {user_name}. Skipping...")
             continue
         scores = compute_scores(articles, user_profile["interests"])
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
-        print(f"✅ Newsletter saved: {md_file}")
+        print(f"Newsletter saved: {md_file}")
         generated.append(md_file)
     return generated
 
 # --- FLASK ROUTE TO TRIGGER GENERATION ---
 @app.route('/')
 def home():
-    return "✅ Newsletter Generator is live!"
+    return "Newsletter Generator is live!"
 
 @app.route('/generate')
 def trigger_generation():
