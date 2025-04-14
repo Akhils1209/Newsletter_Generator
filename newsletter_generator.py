@@ -1,8 +1,12 @@
+from flask import Flask
+import threading
 import feedparser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
 import os
+
+app = Flask(__name__)
 
 # --- USER PROFILES ---
 USERS = {
@@ -104,8 +108,8 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
 
     return filename
 
-# --- MAIN DRIVER FUNCTION ---
-def generate_for_all_users():
+# --- BACKGROUND FUNCTION TO GENERATE NEWSLETTERS ---
+def run_newsletter():
     for user_name, user_profile in USERS.items():
         print(f"\nGenerating newsletter for {user_name}...")
         articles = fetch_articles(user_profile["feeds"])
@@ -113,6 +117,15 @@ def generate_for_all_users():
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
         print(f"Newsletter saved: {md_file}")
 
-# --- RUN FOR ALL USERS ---
-if __name__ == "__main__":
-    generate_for_all_users()
+# --- FLASK ENDPOINT ---
+@app.route('/')
+def index():
+    return "Newsletter Generator is running."
+
+# --- RUN THE BACKGROUND TASK AND FLASK APP ---
+if __name__ == '__main__':
+    # Run newsletter generation in a background thread
+    threading.Thread(target=run_newsletter).start()
+
+    # Start Flask app to listen for web requests (Render requires this)
+    app.run(host='0.0.0.0', port=10000)
