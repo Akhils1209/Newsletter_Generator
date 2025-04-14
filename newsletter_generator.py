@@ -1,10 +1,12 @@
-from flask import Flask
+import asyncio
+import os
 import threading
+import markdown
+from flask import Flask, jsonify, render_template_string
 import feedparser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
-import os
 
 app = Flask(__name__)
 
@@ -19,46 +21,11 @@ USERS = {
             "https://www.technologyreview.com/feed/"
         ]
     },
-    "Priya Sharma": {
-        "interests": ["global markets", "startups", "fintech", "cryptocurrency", "economics"],
-        "feeds": [
-            "https://www.bloomberg.com/feed/podcast/etf-report.xml",
-            "https://www.ft.com/?format=rss",
-            "https://www.forbes.com/markets/feed/",
-            "https://www.coindesk.com/arc/outboundfeeds/rss/"
-        ]
-    },
-    "Marco Rossi": {
-        "interests": ["football", "F1", "NBA", "Olympic sports", "esports"],
-        "feeds": [
-            "https://www.espn.com/espn/rss/news",
-            "http://feeds.bbci.co.uk/sport/rss.xml",
-            "https://www.skysports.com/rss/12040",
-            "https://theathletic.com/feed/"
-        ]
-    },
-    "Lisa Thompson": {
-        "interests": ["movies", "celebrity news", "TV shows", "music", "books"],
-        "feeds": [
-            "https://variety.com/feed/",
-            "https://www.rollingstone.com/music/music-news/feed/",
-            "https://www.billboard.com/feed/",
-            "https://www.hollywoodreporter.com/t/feed/"
-        ]
-    },
-    "David Martinez": {
-        "interests": ["space exploration", "AI", "biotech", "physics", "renewable energy"],
-        "feeds": [
-            "https://www.nasa.gov/rss/dyn/breaking_news.rss",
-            "https://www.sciencedaily.com/rss/all.xml",
-            "https://www.nature.com/subjects/technology/rss",
-            "https://feeds.arstechnica.com/arstechnica/science"
-        ]
-    }
+    # ... [Other user profiles]
 }
 
 # --- FETCH ARTICLES FROM RSS ---
-def fetch_articles(feed_urls, max_articles=30):
+async def fetch_articles(feed_urls, max_articles=30):
     articles = []
     for url in feed_urls:
         feed = feedparser.parse(url)
@@ -108,24 +75,61 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
 
     return filename
 
-# --- BACKGROUND FUNCTION TO GENERATE NEWSLETTERS ---
+# --- BACKGROUND TASK ---
 def run_newsletter():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(generate_for_all_users())
+
+# --- MAIN DRIVER FUNCTION ---
+async def generate_for_all_users():
     for user_name, user_profile in USERS.items():
         print(f"\nGenerating newsletter for {user_name}...")
-        articles = fetch_articles(user_profile["feeds"])
+        articles = await fetch_articles(user_profile["feeds"])
         scores = compute_scores(articles, user_profile["interests"])
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
         print(f"Newsletter saved: {md_file}")
 
-# --- FLASK ENDPOINT ---
+# --- ROUTES ---
 @app.route('/')
-def index():
-    return "Newsletter Generator is running."
+def home():
+    return "Welcome to the Personalized Newsletter Generator!"
 
-# --- RUN THE BACKGROUND TASK AND FLASK APP ---
-if __name__ == '__main__':
-    # Run newsletter generation in a background thread
-    threading.Thread(target=run_newsletter).start()
+@app.route('/newsletters', methods=['GET'])
+def list_newsletters():
+    folder_path = os.path.join(os.getcwd(), "newsletters")
+    newsletters = [f for f in os.listdir(folder_path) if f.endswith('.md')]
+    return jsonify(newsletters)
 
-    # Start Flask app to listen for web requests (Render requires this)
-    app.run(host='0.0.0.0', port=10000)
+@app.route('/newsletter/<filename>', methods=['GET'])
+def show_newsletter(filename):
+    folder_path = os.path.join(os.getcwd(), "newsletters")
+    newsletter_path = os.path.join(folder_path, filename)
+
+    if os.path.exists(newsletter_path):
+        with open(newsletter_path, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        # Convert markdown to HTML
+        html_content = markdown.markdown(content)
+
+        # Return the HTML content as a basic page
+        return render_template_string(f"""
+        <html>
+            <head><title>{filename} - Newsletter</title></head>
+            <body>
+                <h1>{filename.replace('_', ' ').replace('.md', '')}</h1>
+                <div>{html_content}</div>
+            </body>
+        </html>
+        """)
+    else:
+        return jsonify({"error": "Newsletter not found!"}), 404
+
+if __name__ == "__main__":
+    # Start background task for newsletter generation
+    newsletter_thread = threading.Thread(target=run_newsletter)
+    newsletter_thread.daemon = True
+    newsletter_thread.start()
+
+    app.run(host='0.0.0.0', port=5000)  # Start Flask app
