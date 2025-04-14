@@ -1,9 +1,11 @@
+# personalized_newsletter.py
+
 import feedparser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 
@@ -112,57 +114,31 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
 
     return filename
 
-# --- GENERATE ALL USERS ---
+# --- GENERATE FOR ALL USERS ---
 def generate_for_all_users():
-    generated_files = []
+    generated = []
     for user_name, user_profile in USERS.items():
-        print(f"📝 Generating newsletter for {user_name}...")
+        print(f"\n📝 Generating newsletter for {user_name}...")
         articles = fetch_articles(user_profile["feeds"])
         if not articles:
             print(f"⚠️ No articles fetched for {user_name}. Skipping...")
             continue
         scores = compute_scores(articles, user_profile["interests"])
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
-        generated_files.append(md_file)
         print(f"✅ Newsletter saved: {md_file}")
-    return generated_files
+        generated.append(md_file)
+    return generated
 
-# --- FLASK ROUTES ---
-@app.route("/")
+# --- FLASK ROUTE TO TRIGGER GENERATION ---
+@app.route('/')
 def home():
     return "✅ Newsletter Generator is live!"
 
-@app.route("/generate")
-def generate():
-    generated = generate_for_all_users()
-    return jsonify({
-        "status": "success",
-        "generated_files": generated
-    })
+@app.route('/generate')
+def trigger_generation():
+    files = generate_for_all_users()
+    return jsonify({"status": "success", "generated_files": files})
 
-@app.route("/view")
-def view_newsletter():
-    user = request.args.get("user")
-    if not user:
-        return jsonify({"error": "Missing 'user' query parameter"}), 400
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    filename = os.path.join("newsletters", f"{user.replace(' ', '_')}_Newsletter_{today}.md")
-
-    if not os.path.exists(filename):
-        return jsonify({"error": "Newsletter not found for that user."}), 404
-
-    with open(filename, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    return f"<pre>{content}</pre>"
-
-# --- MAIN (for local testing) ---
+# --- RUN FLASK APP ---
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=10000)
-
-
-
-
-
-
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
