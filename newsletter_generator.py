@@ -5,6 +5,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
 import os
+from flask import Flask, jsonify
+
+app = Flask(__name__)
 
 # --- USER PROFILES ---
 USERS = {
@@ -55,7 +58,6 @@ USERS = {
 
 # --- FETCH ARTICLES ---
 def fetch_articles(feed_urls, max_articles=30):
-    """Fetch and parse articles from RSS feed URLs."""
     articles = []
     for url in feed_urls:
         try:
@@ -76,7 +78,6 @@ def fetch_articles(feed_urls, max_articles=30):
 
 # --- COMPUTE ARTICLE SCORES ---
 def compute_scores(articles, interests):
-    """Compute cosine similarity between article content and user interests."""
     content = [article['title'] + " " + article['summary'] for article in articles]
     vectorizer = TfidfVectorizer(stop_words='english')
     try:
@@ -90,7 +91,6 @@ def compute_scores(articles, interests):
 
 # --- GENERATE MARKDOWN FILE ---
 def generate_markdown(user_name, interests, articles, scores, top_n=10):
-    """Generate a markdown newsletter for the user."""
     today = datetime.now().strftime("%Y-%m-%d")
     folder_path = os.path.join(os.getcwd(), "newsletters")
     os.makedirs(folder_path, exist_ok=True)
@@ -114,9 +114,9 @@ def generate_markdown(user_name, interests, articles, scores, top_n=10):
 
     return filename
 
-# --- MAIN EXECUTION ---
+# --- GENERATE FOR ALL USERS ---
 def generate_for_all_users():
-    """Generate newsletters for all users."""
+    generated = []
     for user_name, user_profile in USERS.items():
         print(f"\n📝 Generating newsletter for {user_name}...")
         articles = fetch_articles(user_profile["feeds"])
@@ -126,7 +126,19 @@ def generate_for_all_users():
         scores = compute_scores(articles, user_profile["interests"])
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
         print(f"✅ Newsletter saved: {md_file}")
+        generated.append(md_file)
+    return generated
 
-# --- CLI EXECUTION ---
+# --- FLASK ROUTE TO TRIGGER GENERATION ---
+@app.route('/')
+def home():
+    return "✅ Newsletter Generator is live!"
+
+@app.route('/generate')
+def trigger_generation():
+    files = generate_for_all_users()
+    return jsonify({"status": "success", "generated_files": files})
+
+# --- RUN FLASK APP ---
 if __name__ == "__main__":
-    generate_for_all_users()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
