@@ -1,14 +1,10 @@
-import asyncio
-import os
-import threading
-import markdown
-from flask import Flask, jsonify, render_template_string
+# personalized_newsletter.py
+
 import feedparser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
-
-app = Flask(__name__)
+import os
 
 # --- USER PROFILES ---
 USERS = {
@@ -21,115 +17,116 @@ USERS = {
             "https://www.technologyreview.com/feed/"
         ]
     },
-    # ... [Other user profiles]
+    "Priya Sharma": {
+        "interests": ["global markets", "startups", "fintech", "cryptocurrency", "economics"],
+        "feeds": [
+            "https://www.bloomberg.com/feed/podcast/etf-report.xml",
+            "https://www.coindesk.com/arc/outboundfeeds/rss/"
+        ]
+    },
+    "Marco Rossi": {
+        "interests": ["football", "F1", "NBA", "Olympic sports", "esports"],
+        "feeds": [
+            "https://www.espn.com/espn/rss/news",
+            "http://feeds.bbci.co.uk/sport/rss.xml",
+            "https://www.skysports.com/rss/12040",
+            "https://theathletic.com/feed/"
+        ]
+    },
+    "Lisa Thompson": {
+        "interests": ["movies", "celebrity news", "TV shows", "music", "books"],
+        "feeds": [
+            "https://variety.com/feed/",
+            "https://www.rollingstone.com/music/music-news/feed/",
+            "https://www.billboard.com/feed/",
+            "https://www.hollywoodreporter.com/t/feed/"
+        ]
+    },
+    "David Martinez": {
+        "interests": ["space exploration", "AI", "biotech", "physics", "renewable energy"],
+        "feeds": [
+            "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+            "https://www.sciencedaily.com/rss/all.xml",
+            "https://www.nature.com/subjects/technology/rss",
+            "https://feeds.arstechnica.com/arstechnica/science"
+        ]
+    }
 }
 
-# --- FETCH ARTICLES FROM RSS ---
-async def fetch_articles(feed_urls, max_articles=30):
+# --- FETCH ARTICLES ---
+def fetch_articles(feed_urls, max_articles=30):
+    """Fetch and parse articles from RSS feed URLs."""
     articles = []
     for url in feed_urls:
-        feed = feedparser.parse(url)
-        for entry in feed.entries[:max_articles]:
-            articles.append({
-                "title": entry.title,
-                "link": entry.link,
-                "summary": entry.get("summary", entry.get("description", "")),
-                "published": entry.get("published", "Unknown")
-            })
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:max_articles]:
+                summary = entry.get("summary") or entry.get("description", "")
+                if not summary:
+                    continue
+                articles.append({
+                    "title": entry.get("title", "No Title"),
+                    "link": entry.get("link", "#"),
+                    "summary": summary,
+                    "published": entry.get("published", "Unknown")
+                })
+        except Exception as e:
+            print(f"⚠️ Error parsing feed {url}: {e}")
     return articles
 
-# --- COMPUTE ARTICLE RELEVANCE ---
+# --- COMPUTE ARTICLE SCORES ---
 def compute_scores(articles, interests):
+    """Compute cosine similarity between article content and user interests."""
     content = [article['title'] + " " + article['summary'] for article in articles]
     vectorizer = TfidfVectorizer(stop_words='english')
-    tfidf_matrix = vectorizer.fit_transform(content)
-    interest_query = vectorizer.transform([" ".join(interests)])
-    scores = cosine_similarity(tfidf_matrix, interest_query).flatten()
+    try:
+        tfidf_matrix = vectorizer.fit_transform(content)
+        interest_query = vectorizer.transform([" ".join(interests)])
+        scores = cosine_similarity(tfidf_matrix, interest_query).flatten()
+    except Exception as e:
+        print(f"⚠️ Error computing TF-IDF scores: {e}")
+        scores = [0] * len(articles)
     return scores
 
-# --- GENERATE MARKDOWN NEWSLETTER ---
+# --- GENERATE MARKDOWN FILE ---
 def generate_markdown(user_name, interests, articles, scores, top_n=10):
+    """Generate a markdown newsletter for the user."""
     today = datetime.now().strftime("%Y-%m-%d")
-    # Create folder 'newsletters' if it doesn't exist
     folder_path = os.path.join(os.getcwd(), "newsletters")
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-    
-    filename = os.path.join(folder_path, f"{user_name.replace(' ', '_')}_Newsletter_{today}.md")
+    os.makedirs(folder_path, exist_ok=True)
 
+    filename = os.path.join(folder_path, f"{user_name.replace(' ', '_')}_Newsletter_{today}.md")
     top_articles = sorted(zip(articles, scores), key=lambda x: x[1], reverse=True)[:top_n]
 
     with open(filename, "w", encoding="utf-8") as f:
         f.write(f"# Personalized Newsletter for {user_name}\n")
         f.write(f"Date: {today}\n\n")
         f.write(f"Top Interests: {', '.join(interests)}\n\n")
-        f.write("Highlights:\n")
+        f.write("## Highlights:\n\n")
 
         for i, (article, score) in enumerate(top_articles, 1):
-            f.write(f"{i}. {article['title']}\n")
-            f.write(f"Published: {article['published']}\n\n")
-            f.write(f"{article['summary'][:300]}...\n\n")
+            f.write(f"### {i}. {article['title']}\n")
+            f.write(f"*Published:* {article['published']}\n\n")
+            f.write(f"{article['summary'][:300].strip()}...\n\n")
             f.write(f"[Read Full Article]({article['link']})\n\n")
 
-        f.write("\n---\nGenerated by an AI-Powered Newsletter System using TF-IDF magic!")
+        f.write("\n---\nGenerated by an AI-Powered Newsletter System using TF-IDF magic!\n")
 
     return filename
 
-# --- BACKGROUND TASK ---
-def run_newsletter():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(generate_for_all_users())
-
-# --- MAIN DRIVER FUNCTION ---
-async def generate_for_all_users():
+# --- MAIN EXECUTION ---
+def generate_for_all_users():
+    """Generate newsletters for all users."""
     for user_name, user_profile in USERS.items():
-        print(f"\nGenerating newsletter for {user_name}...")
-        articles = await fetch_articles(user_profile["feeds"])
+        print(f"\n📝 Generating newsletter for {user_name}...")
+        articles = fetch_articles(user_profile["feeds"])
+        if not articles:
+            print(f"⚠️ No articles fetched for {user_name}. Skipping...")
+            continue
         scores = compute_scores(articles, user_profile["interests"])
         md_file = generate_markdown(user_name, user_profile["interests"], articles, scores)
-        print(f"Newsletter saved: {md_file}")
+        print(f"✅ Newsletter saved: {md_file}")
 
-# --- ROUTES ---
-@app.route('/')
-def home():
-    return "Welcome to the Personalized Newsletter Generator!"
-
-@app.route('/newsletters', methods=['GET'])
-def list_newsletters():
-    folder_path = os.path.join(os.getcwd(), "newsletters")
-    newsletters = [f for f in os.listdir(folder_path) if f.endswith('.md')]
-    return jsonify(newsletters)
-
-@app.route('/newsletter/<filename>', methods=['GET'])
-def show_newsletter(filename):
-    folder_path = os.path.join(os.getcwd(), "newsletters")
-    newsletter_path = os.path.join(folder_path, filename)
-
-    if os.path.exists(newsletter_path):
-        with open(newsletter_path, 'r', encoding='utf-8') as file:
-            content = file.read()
-
-        # Convert markdown to HTML
-        html_content = markdown.markdown(content)
-
-        # Return the HTML content as a basic page
-        return render_template_string(f"""
-        <html>
-            <head><title>{filename} - Newsletter</title></head>
-            <body>
-                <h1>{filename.replace('_', ' ').replace('.md', '')}</h1>
-                <div>{html_content}</div>
-            </body>
-        </html>
-        """)
-    else:
-        return jsonify({"error": "Newsletter not found!"}), 404
-
+# --- CLI EXECUTION ---
 if __name__ == "__main__":
-    # Start background task for newsletter generation
-    newsletter_thread = threading.Thread(target=run_newsletter)
-    newsletter_thread.daemon = True
-    newsletter_thread.start()
-
-    app.run(host='0.0.0.0', port=5000)  # Start Flask app
+    generate_for_all_users()
