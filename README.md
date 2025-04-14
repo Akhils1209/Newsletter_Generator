@@ -12,11 +12,6 @@ Build a system that:
 - Ranks articles by relevance
 - Outputs structured newsletters in Markdown format
 
-## Key AI Tools Used
-
-- **TfidfVectorizer**: Converts text to vector format for comparison
-- **Cosine Similarity**: Measures how closely articles match user interests
-
 ## User Profiles
 
 Includes personas like:
