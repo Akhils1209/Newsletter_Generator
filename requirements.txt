@@ -23,7 +23,7 @@ joblib==1.4.2
 lxml==5.2.2
 MarkupSafe==2.1.5
 multidict==6.0.5
-numpy==1.24.2  # Corrected this line
+numpy==1.24.2
 openai==0.28.0
 pillow==10.3.0
 pydantic==2.7.1
